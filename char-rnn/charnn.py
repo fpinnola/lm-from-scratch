@@ -5,7 +5,7 @@ import torch
 # Load data
 def load_data():
     dataset = open("datasets/shakespeare/input.txt").read()
-    dataset = "".join([line for line in dataset.splitlines() if ':' not in line]).lower() # Remove all the lines with speaker names, should increase consistency
+    dataset = " ".join([line for line in dataset.splitlines() if ':' not in line]).lower() # Remove all the lines with speaker names, all lowercase, should increase consistency
     return dataset
 
 # build the vocabulary of characters and mappings to/from integers
@@ -100,14 +100,14 @@ class CharRNN():
        
 if __name__ == '__main__':
 
-    hidden_size = [200, 100] # Size of Recurrent layers 1 and 2
+    hidden_size = [300, 250] # Size of Recurrent layers 1 and 2
     embedding_size = 10 # Size of embeddings in embeddings layer
     seq_len = 25 # Sequence length during training
     lr = 0.1 # Learning rate
     lr_decay = 0.8 # lr = lr * lr_decay (Set to 1.0 for no decay)
     lr_min = 0.02 # mininmum lr
-    epochs = 1 # Number of epochs
-    sample_input = 'thy' # Input sequence to sample after each epoch
+    epochs = 25 # Number of epochs
+    sample_input = 'The ' # Input sequence to sample after each epoch
 
     dataset = load_data() # Returns string with entire input file
     stoi, itos = build_vocab(dataset) # Vocabulary
@@ -117,11 +117,16 @@ if __name__ == '__main__':
     # test_set = dataset_np[:int(len(dataset_np) * 0.85)]
     
     model = CharRNN(len(stoi.keys()),hidden_size, embedding_size)
+    print(f"parmeters: {sum([torch.numel(n) for n in model.parameters()])}")
 
     for p in model.parameters():
         p.requires_grad = True
 
-    for ie in range(epochs):
+    prev_loss = [1e6]
+    lowered_lr = False
+    ie = 0
+    while True:
+        ie += 1
         print(f"Epoch {ie} lr={lr}")
         model.h1 = torch.zeros_like(model.h1)
         model.h2 = torch.zeros_like(model.h2)
@@ -160,10 +165,20 @@ if __name__ == '__main__':
                 assert p.grad is not None, "Params must have gradients"
                 p.data += -p.grad * lr
 
-        lr *= lr_decay
-        lr = max(lr, lr_min)
-        print(f"Epoch {ie } loss: {sum(loss_track) / len(loss_track)}")
+
+        epoch_loss = sum(loss_track) / len(loss_track)
+        print(f"Epoch {ie } loss: {epoch_loss}")
         print(f"Sample: {''.join([itos[x] for x in model.sample([stoi[x] for x in sample_input], 100)])}")
+        if epoch_loss >= prev_loss[len(prev_loss) - 1]:
+            print(f"Reducing loss by {1 - lr_decay}")
+            if lowered_lr: break
+            lr *= lr_decay
+            lowered_lr = True
+        else:
+            lowered_lr = False
+            
+        prev_loss.append(epoch_loss)
+
 
     ixes = model.sample([stoi[x] for x in sample_input], 200)
-    print(f"End Sample: {''.join([itos[x] for x in model.sample([stoi[x] for x in sample_input], 200)])}")
+    print(f"End Sample: {''.join([itos[x] for x in model.sample([stoi[x] for x in sample_input], 500)])}")
